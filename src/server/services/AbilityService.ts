@@ -50,9 +50,11 @@ export class AbilityService {
 		});
 
 		// Listen for profile updated events
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		ServerSignalHelpers.Connect("PlayerProfileUpdated", (player: Player, key: any, data: any) => {
 			const profileData = this._playerProfiles.get(player);
 			if (profileData) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				(profileData as any)[key] = data;
 			}
 		});
@@ -172,7 +174,7 @@ export class AbilityService {
 	private validateAndConsumeResources(player: Player, abilityKey: AbilityKey): boolean {
 		const manaCost = AbilitiesMeta[abilityKey]?.cost.mana ?? 0;
 		const staminaCost = AbilitiesMeta[abilityKey]?.cost.stamina ?? 0;
-		
+
 		// Request resource modifications via signals
 		if (manaCost > 0) {
 			ServerSignalHelpers.Emit.ResourceModificationRequested(player, "Mana", -manaCost, "AbilityService");
@@ -180,8 +182,8 @@ export class AbilityService {
 		if (staminaCost > 0) {
 			ServerSignalHelpers.Emit.ResourceModificationRequested(player, "Stamina", -staminaCost, "AbilityService");
 		}
-		
-		// For now, assume success - in a more robust implementation, 
+
+		// For now, assume success - in a more robust implementation,
 		// you'd want to wait for confirmation from ResourcesService
 		return true;
 	}

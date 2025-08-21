@@ -1,5 +1,8 @@
 /// <reference types="@rbxts/types" />
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-require-imports */
+
 /**
  * @file        ServerSignals.ts
  * @module      ServerSignals
@@ -74,7 +77,9 @@ export interface AttributeSignals {
  */
 export interface AbilitySignals {
 	/** Request to validate if an ability can be activated */
-	AbilityActivationRequested: Signal<(player: Player, abilityKey: AbilityKey, callback: (success: boolean) => void) => void>;
+	AbilityActivationRequested: Signal<
+		(player: Player, abilityKey: AbilityKey, callback: (success: boolean) => void) => void
+	>;
 	/** Fired when an ability is successfully activated */
 	AbilityActivated: Signal<(player: Player, abilityKey: AbilityKey) => void>;
 }
@@ -158,10 +163,7 @@ export const ServerSignalHelpers = {
 	/**
 	 * Connect to a signal
 	 */
-	Connect<K extends keyof ServerSignals>(
-		signalName: K,
-		callback: any
-	): RBXScriptConnection {
+	Connect(signalName: keyof ServerSignals, callback: any): RBXScriptConnection {
 		const signal = GetServerSignal(signalName) as unknown;
 		return (signal as { Connect: (cb: any) => RBXScriptConnection }).Connect(callback);
 	},
@@ -169,10 +171,7 @@ export const ServerSignalHelpers = {
 	/**
 	 * Connect to a signal once
 	 */
-	Once<K extends keyof ServerSignals>(
-		signalName: K,
-		callback: any
-	): RBXScriptConnection {
+	Once(signalName: keyof ServerSignals, callback: any): RBXScriptConnection {
 		const signal = GetServerSignal(signalName) as unknown;
 		return (signal as { Once: (cb: any) => RBXScriptConnection }).Once(callback);
 	},
@@ -211,5 +210,5 @@ export const ServerSignalHelpers = {
 		AbilityActivated(player: Player, abilityKey: AbilityKey) {
 			GetServerSignal("AbilityActivated").Fire(player, abilityKey);
 		},
-	}
+	},
 };

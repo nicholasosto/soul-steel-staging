@@ -48,9 +48,11 @@ export class ProgressionService {
 		});
 
 		// Listen for profile updated events
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		ServerSignalHelpers.Connect("PlayerProfileUpdated", (player: Player, key: any, data: any) => {
 			const profileData = this._playerProfiles.get(player);
 			if (profileData) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				(profileData as any)[key] = data;
 			}
 		});
@@ -77,10 +79,10 @@ export class ProgressionService {
 			progression.Level += 1;
 			progression.NextLevelExperience = getNextLevelExperience(progression.Level);
 		}
-		
+
 		// Emit signal that progression data was updated
 		ServerSignalHelpers.Emit.PlayerProfileUpdated(player, "Progression", progression);
-		
+
 		return progression;
 	}
 

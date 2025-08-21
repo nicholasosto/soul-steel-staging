@@ -48,9 +48,11 @@ export class AttributesService {
 		});
 
 		// Listen for profile updated events
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		ServerSignalHelpers.Connect("PlayerProfileUpdated", (player: Player, key: any, data: any) => {
 			const profileData = this._playerProfiles.get(player);
 			if (profileData) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				(profileData as any)[key] = data;
 			}
 		});
@@ -61,9 +63,12 @@ export class AttributesService {
 		});
 
 		// Listen for attribute increase requests
-		ServerSignalHelpers.Connect("AttributeIncreaseRequested", (player: Player, key: AttributeKey, amount: number) => {
-			AttributesService.Increase(player, key, amount);
-		});
+		ServerSignalHelpers.Connect(
+			"AttributeIncreaseRequested",
+			(player: Player, key: AttributeKey, amount: number) => {
+				AttributesService.Increase(player, key, amount);
+			},
+		);
 	}
 
 	public static Increase(player: Player, key: AttributeKey, amount: number) {
@@ -73,16 +78,16 @@ export class AttributesService {
 			warn(`No profile found for player ${player.Name} when increasing attribute ${key}`);
 			return;
 		}
-		
+
 		const attrs = profileData.Attributes;
 		const newValue = clampAttr(key, attrs[key] + amount);
 		const delta = newValue - attrs[key];
 		if (delta === 0) return;
-		
+
 		attrs[key] = newValue;
 		attrs.SpentPoints += delta;
 		attrs.AvailablePoints = math.max(attrs.AvailablePoints - delta, 0);
-		
+
 		// Emit signals for the changes
 		ServerSignalHelpers.Emit.PlayerProfileUpdated(player, "Attributes", attrs);
 		ServerSignalHelpers.Emit.AttributeChanged(player, attrs);

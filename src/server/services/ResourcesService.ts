@@ -82,10 +82,10 @@ export class ResourcesService {
 
 		// Send updated resource data to the player
 		svc._send(player, key, resourceData);
-		
+
 		// Emit signal that resource changed
 		ServerSignalHelpers.Emit.ResourceChanged(player, key, resourceData);
-		
+
 		return true;
 	}
 
@@ -96,7 +96,7 @@ export class ResourcesService {
 			warn(`No profile data found for player ${player.Name} for resource recalculation`);
 			return;
 		}
-		
+
 		const attrs: AttributesDTO = profileData.Attributes ?? DefaultAttributes;
 		const level = (profileData as unknown as { Level?: number })?.Level ?? 1;
 
@@ -120,9 +120,11 @@ export class ResourcesService {
 		});
 
 		// Listen for profile updated events
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		ServerSignalHelpers.Connect("PlayerProfileUpdated", (player: Player, key: any, data: any) => {
 			const profileData = this._playerProfiles.get(player);
 			if (profileData) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				(profileData as any)[key] = data;
 			}
 		});
@@ -138,12 +140,15 @@ export class ResourcesService {
 		});
 
 		// Listen for resource modification requests
-		ServerSignalHelpers.Connect("ResourceModificationRequested", (player: Player, key: ResourceKey, delta: number, source: string) => {
-			const success = ResourcesService.ModifyResource(player, key, delta);
-			if (!success) {
-				warn(`Failed to modify resource ${key} for player ${player.Name} from source: ${source}`);
-			}
-		});
+		ServerSignalHelpers.Connect(
+			"ResourceModificationRequested",
+			(player: Player, key: ResourceKey, delta: number, source: string) => {
+				const success = ResourcesService.ModifyResource(player, key, delta);
+				if (!success) {
+					warn(`Failed to modify resource ${key} for player ${player.Name} from source: ${source}`);
+				}
+			},
+		);
 	}
 	private _setupConnections() {
 		Players.PlayerAdded.Connect((p) => this._onJoin(p));

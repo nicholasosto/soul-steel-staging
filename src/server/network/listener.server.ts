@@ -8,6 +8,8 @@ const Functions = {
 
 /* --- Listeners --- */
 Functions.GetProfileData.SetCallback((player: Player, key: ProfileDataKey) => {
+	// Note: Direct DataService access is acceptable here as this is a network callback
+	// that needs to return profile data synchronously to the client
 	const profile = DataProfileController.GetProfile(player);
 	if (profile) {
 		const data = profile.Data[key];

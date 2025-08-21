@@ -114,7 +114,6 @@ export class DataProfileController {
 
 			// Emit signal that profile is loaded and ready
 			ServerSignalHelpers.Emit.PlayerProfileLoaded(player, profile.Data);
-
 		} catch (err) {
 			warn(`ProfileService: (2) - Error loading profile for player ${player.Name}: ${err}`);
 		}
@@ -141,16 +140,16 @@ export class DataProfileController {
 
 	/* Update Profile Data - emit signal when profile data changes */
 	public static UpdateProfileData<K extends keyof ProfileDataMap>(
-		player: Player, 
-		key: K, 
-		data: ProfileDataMap[K]
+		player: Player,
+		key: K,
+		data: ProfileDataMap[K],
 	): boolean {
 		const profile = this.GetProfile(player);
 		if (!profile) {
 			warn(`No profile found for player ${player.Name} when updating ${key}`);
 			return false;
 		}
-		
+
 		profile.Data[key] = data;
 		ServerSignalHelpers.Emit.PlayerProfileUpdated(player, key, data);
 		return true;
@@ -160,7 +159,7 @@ export class DataProfileController {
 	public static GetProfileData<K extends keyof ProfileDataMap>(
 		player: Player,
 		key: K,
-		callback: (data: ProfileDataMap[K] | undefined) => void
+		callback: (data: ProfileDataMap[K] | undefined) => void,
 	): void {
 		const profile = this.GetProfile(player);
 		const data = profile?.Data[key];
