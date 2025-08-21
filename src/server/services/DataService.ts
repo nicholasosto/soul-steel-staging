@@ -25,6 +25,7 @@ import { Profile } from "@rbxts/profileservice/globals";
 import { AbilityKey, DefaultAttributes, DefaultSettings, ProfileDataMap } from "shared/definitions";
 import { CodeSettings } from "shared/constants/CodeSettings";
 import { DefaultProgression } from "shared/definitions/ProfileDefinitions/Progression";
+import { ServerSignalHelpers } from "shared/network/ServerSignals";
 
 /* ========================================== Profile Store Setup =============================================== */
 
@@ -107,7 +108,12 @@ export class DataProfileController {
 			profile.ListenToRelease(() => {
 				print(`[${player.Name}] - Profile released.`);
 				this._profileMap.delete(player); // Remove the profile from the map
+				// Emit signal that profile is being unloaded
+				ServerSignalHelpers.Emit.PlayerProfileUnloaded(player);
 			});
+
+			// Emit signal that profile is loaded and ready
+			ServerSignalHelpers.Emit.PlayerProfileLoaded(player, profile.Data);
 		} catch (err) {
 			warn(`ProfileService: (2) - Error loading profile for player ${player.Name}: ${err}`);
 		}
@@ -119,6 +125,8 @@ export class DataProfileController {
 	/* On Player Leaving */
 	private static _onPlayerLeaving(player: Player) {
 		//print(`Player leaving: ${player.Name}`);
+		// Emit signal before removing the profile
+		ServerSignalHelpers.Emit.PlayerProfileUnloaded(player);
 		this._profileMap.delete(player); // Remove the profile from the map
 	}
 
@@ -128,5 +136,33 @@ export class DataProfileController {
 			print(`DataProfileController.GetProfile(${player.Name}) called.`, this._profileMap.get(player));
 		}
 		return this._profileMap.get(player); // Return the profile from the map
+	}
+
+	/* Update Profile Data - emit signal when profile data changes */
+	public static UpdateProfileData<K extends keyof ProfileDataMap>(
+		player: Player,
+		key: K,
+		data: ProfileDataMap[K],
+	): boolean {
+		const profile = this.GetProfile(player);
+		if (!profile) {
+			warn(`No profile found for player ${player.Name} when updating ${key}`);
+			return false;
+		}
+
+		profile.Data[key] = data;
+		ServerSignalHelpers.Emit.PlayerProfileUpdated(player, key, data);
+		return true;
+	}
+
+	/* Get Profile Data via callback - for signal-based access */
+	public static GetProfileData<K extends keyof ProfileDataMap>(
+		player: Player,
+		key: K,
+		callback: (data: ProfileDataMap[K] | undefined) => void,
+	): void {
+		const profile = this.GetProfile(player);
+		const data = profile?.Data[key];
+		callback(data);
 	}
 }

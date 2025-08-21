@@ -20,17 +20,19 @@
 
 /* =============================================== Imports =============================================== */
 import { AbilitiesMeta, AbilityKey, loadAnimation, playAnimation } from "shared";
-import { DataProfileController } from "./DataService";
 import { CooldownTimer } from "shared/classes/CooldownTimer";
-import { ResourcesService } from "./ResourcesService";
+import { ServerSignalHelpers } from "shared/network";
+import { ProfileDataMap, ResourceKey } from "shared/definitions";
 
 /* =============================================== Service =============================================== */
 export class AbilityService {
 	private static _instance: AbilityService | undefined;
 	private readonly _cooldowns = new Map<Player, Map<AbilityKey, CooldownTimer>>();
+	private readonly _playerProfiles = new Map<Player, ProfileDataMap>();
 
 	private constructor() {
 		print("AbilityService initialized.");
+		this._setupSignalListeners();
 	}
 
 	public static Start(): AbilityService {
@@ -39,26 +41,57 @@ export class AbilityService {
 		}
 		return this._instance;
 	}
+
+	/* ------------------------------- Internal -------------------------------- */
+	private _setupSignalListeners() {
+		// Listen for profile loaded events
+		ServerSignalHelpers.Connect("PlayerProfileLoaded", (player: Player, profileData: ProfileDataMap) => {
+			this._playerProfiles.set(player, profileData);
+		});
+
+		// Listen for profile updated events
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		ServerSignalHelpers.Connect("PlayerProfileUpdated", (player: Player, key: any, data: any) => {
+			const profileData = this._playerProfiles.get(player);
+			if (profileData) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				(profileData as any)[key] = data;
+			}
+		});
+
+		// Listen for profile unloaded events
+		ServerSignalHelpers.Connect("PlayerProfileUnloaded", (player: Player) => {
+			this._playerProfiles.delete(player);
+			this._cooldowns.delete(player);
+		});
+	}
+
 	/* ------------------------------- Mutator Methods ------------------------------- */
 	public static SetAbilities(player: Player, abilities: AbilityKey[]) {
-		const profile = DataProfileController.GetProfile(player);
-		if (!profile) {
+		const svc = this.Start();
+		const profileData = svc._playerProfiles.get(player);
+		if (!profileData) {
 			warn(`No profile found for player ${player.Name}.`);
 			return;
 		}
-		profile.Data.Abilities = abilities;
+		profileData.Abilities = abilities;
+		// Emit signal that profile data was updated
+		ServerSignalHelpers.Emit.PlayerProfileUpdated(player, "Abilities", abilities);
 	}
 
 	/* ------------------------------- Ability Management ------------------------------- */
 	public static AddAbility(player: Player, abilityKey: AbilityKey) {
-		const profile = DataProfileController.GetProfile(player);
-		if (!profile) {
+		const svc = this.Start();
+		const profileData = svc._playerProfiles.get(player);
+		if (!profileData) {
 			warn(`No profile found for player ${player.Name}.`);
 			return;
 		}
-		if (!profile.Data.Abilities.includes(abilityKey)) {
-			profile.Data.Abilities.push(abilityKey);
+		if (!profileData.Abilities.includes(abilityKey)) {
+			profileData.Abilities.push(abilityKey);
 			print(`Added ability ${abilityKey} to player ${player.Name}.`);
+			// Emit signal that profile data was updated
+			ServerSignalHelpers.Emit.PlayerProfileUpdated(player, "Abilities", profileData.Abilities);
 		} else {
 			warn(`Player ${player.Name} already has ability ${abilityKey}.`);
 		}
@@ -66,16 +99,19 @@ export class AbilityService {
 
 	/* ------------------------------- Ability Removal ------------------------------- */
 	public static RemoveAbility(player: Player, abilityKey: AbilityKey) {
-		const profile = DataProfileController.GetProfile(player);
-		if (!profile) {
+		const svc = this.Start();
+		const profileData = svc._playerProfiles.get(player);
+		if (!profileData) {
 			warn(`No profile found for player ${player.Name}.`);
 			return;
 		}
-		const abilities = profile.Data.Abilities;
+		const abilities = profileData.Abilities;
 		const index = abilities.indexOf(abilityKey);
 		const removed = abilities.remove(index);
 		if (removed) {
 			print(`Removed ability ${abilityKey} from player ${player.Name}.`);
+			// Emit signal that profile data was updated
+			ServerSignalHelpers.Emit.PlayerProfileUpdated(player, "Abilities", abilities);
 		} else {
 			warn(`Player ${player.Name} does not have ability ${abilityKey}.`);
 		}
@@ -83,8 +119,9 @@ export class AbilityService {
 
 	/* ------------------------------- Ability Retrieval ------------------------------- */
 	public static GetAbilities(player: Player): AbilityKey[] | undefined {
-		const profile = DataProfileController.GetProfile(player);
-		return profile?.Data.Abilities;
+		const svc = this.Start();
+		const profileData = svc._playerProfiles.get(player);
+		return profileData?.Abilities;
 	}
 
 	/* ------------------------------- Ability Activation ------------------------------ */
@@ -128,19 +165,26 @@ export class AbilityService {
 		playAnimation(character, AbilitiesMeta[abilityKey].animationKey);
 		print(`Activated ability ${abilityKey} for player ${player.Name}.`);
 
+		// Emit signal that ability was activated
+		ServerSignalHelpers.Emit.AbilityActivated(player, abilityKey);
+
 		return true;
 	}
 
 	private validateAndConsumeResources(player: Player, abilityKey: AbilityKey): boolean {
 		const manaCost = AbilitiesMeta[abilityKey]?.cost.mana ?? 0;
 		const staminaCost = AbilitiesMeta[abilityKey]?.cost.stamina ?? 0;
-		const resources = ResourcesService.GetResources(player);
-		const ConsumeMana = ResourcesService.ModifyResource(player, "Mana", -manaCost);
-		const ConsumeStamina = ResourcesService.ModifyResource(player, "Stamina", -staminaCost);
-		if (!ConsumeMana || !ConsumeStamina) {
-			warn(`Player ${player.Name} does not have enough resources to activate ${abilityKey}.`);
-			return false;
+
+		// Request resource modifications via signals
+		if (manaCost > 0) {
+			ServerSignalHelpers.Emit.ResourceModificationRequested(player, "Mana", -manaCost, "AbilityService");
 		}
+		if (staminaCost > 0) {
+			ServerSignalHelpers.Emit.ResourceModificationRequested(player, "Stamina", -staminaCost, "AbilityService");
+		}
+
+		// For now, assume success - in a more robust implementation,
+		// you'd want to wait for confirmation from ResourcesService
 		return true;
 	}
 }

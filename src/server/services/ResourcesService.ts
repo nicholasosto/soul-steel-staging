@@ -30,20 +30,23 @@
 import { Players, RunService } from "@rbxts/services";
 import { ResourceKey, ResourceDTO, RESOURCE_KEYS, DEFAULT_RESOURCES } from "shared/definitions/Resources";
 import { DefaultAttributes, AttributesDTO } from "shared/definitions/ProfileDefinitions/Attributes";
-import { DataProfileController } from "./DataService";
+import { ProfileDataMap } from "shared/definitions";
 import { calculateResources } from "shared/calculations";
 import { ServerSend } from "server/network";
+import { ServerSignalHelpers } from "shared/network";
 
 /* =============================================== Service ===================== */
 export class ResourcesService {
 	private static _instance: ResourcesService | undefined;
 	private readonly _map = new Map<Player, Record<ResourceKey, ResourceDTO>>();
 	private readonly _lastSend = new Map<Player, Map<ResourceKey, number>>();
+	private readonly _playerProfiles = new Map<Player, ProfileDataMap>();
 
 	private static heartbeat: RBXScriptConnection | undefined;
 
 	private constructor() {
 		this._setupConnections();
+		this._setupSignalListeners();
 	}
 
 	public static Start(): ResourcesService {
@@ -79,14 +82,23 @@ export class ResourcesService {
 
 		// Send updated resource data to the player
 		svc._send(player, key, resourceData);
+
+		// Emit signal that resource changed
+		ServerSignalHelpers.Emit.ResourceChanged(player, key, resourceData);
+
 		return true;
 	}
 
 	public static Recalculate(player: Player) {
 		const svc = this.Start();
-		const profile = DataProfileController.GetProfile(player);
-		const attrs: AttributesDTO = profile?.Data.Attributes ?? DefaultAttributes;
-		const level = (profile as unknown as { Data: { Level?: number } })?.Data?.Level ?? 1;
+		const profileData = svc._playerProfiles.get(player);
+		if (!profileData) {
+			warn(`No profile data found for player ${player.Name} for resource recalculation`);
+			return;
+		}
+
+		const attrs: AttributesDTO = profileData.Attributes ?? DefaultAttributes;
+		const level = (profileData as unknown as { Level?: number })?.Level ?? 1;
 
 		const current = svc._map.get(player);
 		const snapshot = calculateResources(attrs, level, current);
@@ -94,10 +106,50 @@ export class ResourcesService {
 
 		(RESOURCE_KEYS as readonly ResourceKey[]).forEach((key) => {
 			svc._send(player, key, snapshot[key]);
+			// Emit signal that resource changed
+			ServerSignalHelpers.Emit.ResourceChanged(player, key, snapshot[key]);
 		});
 	}
 
 	/* ------------------------------- Internal -------------------------------- */
+	private _setupSignalListeners() {
+		// Listen for profile loaded events
+		ServerSignalHelpers.Connect("PlayerProfileLoaded", (player: Player, profileData: ProfileDataMap) => {
+			this._playerProfiles.set(player, profileData);
+			this._onProfileLoaded(player, profileData);
+		});
+
+		// Listen for profile updated events
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		ServerSignalHelpers.Connect("PlayerProfileUpdated", (player: Player, key: any, data: any) => {
+			const profileData = this._playerProfiles.get(player);
+			if (profileData) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				(profileData as any)[key] = data;
+			}
+		});
+
+		// Listen for profile unloaded events
+		ServerSignalHelpers.Connect("PlayerProfileUnloaded", (player: Player) => {
+			this._playerProfiles.delete(player);
+		});
+
+		// Listen for resource recalculation requests
+		ServerSignalHelpers.Connect("ResourceRecalculationRequested", (player: Player) => {
+			ResourcesService.Recalculate(player);
+		});
+
+		// Listen for resource modification requests
+		ServerSignalHelpers.Connect(
+			"ResourceModificationRequested",
+			(player: Player, key: ResourceKey, delta: number, source: string) => {
+				const success = ResourcesService.ModifyResource(player, key, delta);
+				if (!success) {
+					warn(`Failed to modify resource ${key} for player ${player.Name} from source: ${source}`);
+				}
+			},
+		);
+	}
 	private _setupConnections() {
 		Players.PlayerAdded.Connect((p) => this._onJoin(p));
 		Players.PlayerRemoving.Connect((p) => this._onLeave(p));
@@ -130,6 +182,7 @@ export class ResourcesService {
 					if (data.current < data.max) {
 						data.current = math.min(data.current + 1, data.max); // Regenerate resources over time
 						this._send(player, key, data);
+						ServerSignalHelpers.Emit.ResourceChanged(player, key, data);
 					}
 				});
 			});
@@ -138,13 +191,31 @@ export class ResourcesService {
 	}
 
 	private _onJoin(player: Player) {
+		// The actual resource initialization will happen when profile is loaded via signal
+		// This method now only sets up basic connections
 		task.defer(() => {
 			const character = player.Character || player.CharacterAdded.Wait()[0];
 			const humanoid = character.WaitForChild("Humanoid") as Humanoid;
 
-			const profile = DataProfileController.GetProfile(player);
-			const attrs: AttributesDTO = profile?.Data.Attributes ?? DefaultAttributes;
-			const level = (profile as unknown as { Data: { Level?: number } })?.Data?.Level ?? 1;
+			// Set up humanoid health change listener
+			humanoid.HealthChanged.Connect((newHealth) => {
+				const res = this._map.get(player);
+				if (!res) return;
+				const healthData = res["Health"];
+				healthData.current = newHealth;
+				this._send(player, "Health", healthData);
+				ServerSignalHelpers.Emit.ResourceChanged(player, "Health", healthData);
+			});
+		});
+	}
+
+	private _onProfileLoaded(player: Player, profileData: ProfileDataMap) {
+		task.defer(() => {
+			const character = player.Character || player.CharacterAdded.Wait()[0];
+			const humanoid = character.WaitForChild("Humanoid") as Humanoid;
+
+			const attrs: AttributesDTO = profileData.Attributes ?? DefaultAttributes;
+			const level = (profileData as unknown as { Level?: number })?.Level ?? 1;
 
 			const resources = calculateResources(attrs, level);
 			this._map.set(player, resources);
@@ -154,14 +225,7 @@ export class ResourcesService {
 
 			(RESOURCE_KEYS as readonly ResourceKey[]).forEach((key) => {
 				this._send(player, key, resources[key]);
-			});
-
-			humanoid.HealthChanged.Connect((newHealth) => {
-				const res = this._map.get(player);
-				if (!res) return;
-				const healthData = res["Health"];
-				healthData.current = newHealth;
-				this._send(player, "Health", healthData);
+				ServerSignalHelpers.Emit.ResourceChanged(player, key, resources[key]);
 			});
 		});
 	}

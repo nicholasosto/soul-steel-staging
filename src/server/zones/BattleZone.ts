@@ -1,7 +1,7 @@
 import { Workspace } from "@rbxts/services";
 import { ZoneBase } from "./ZoneBase";
 import { PlayerHelpers } from "shared/helpers/PlayerCharacter";
-import { ResourcesService } from "server/services";
+import { ServerSignalHelpers } from "shared/network";
 
 const PlayerEntered = (player: Player) => {
 	const character = player.Character || player.CharacterAdded.Wait()[0];
@@ -14,7 +14,8 @@ const PlayerEntered = (player: Player) => {
 		print(`Player ${player.Name} has no PrimaryPart in their character.`);
 		return;
 	}
-	ResourcesService.ModifyResource(player, "Health", -20); // Example: Modify health resource when entering the Battle Zone
+	// Use signal to request resource modification instead of direct service call
+	ServerSignalHelpers.Emit.ResourceModificationRequested(player, "Health", -20, "BattleZone");
 };
 
 const PlayerLeft = (player: Player) => {
