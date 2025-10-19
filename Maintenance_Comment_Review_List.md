@@ -7,9 +7,9 @@ This checklist tracks comment updates for each file.
 - [x] **[scripts/task-cli.ts](./scripts/task-cli.ts)**
 - [x] **[src/client/index.ts](./src/client/index.ts)**
 - [x] **[src/client/main.client.ts](./src/client/main.client.ts)**
-- [x] **[src/client/network/ClientNetworkService.ts](./src/client/network/ClientNetworkService.ts)**
+- [x] **[src/client/network/ClientNetwork.ts](./src/client/network/ClientNetwork.ts)**
 - [x] **[src/client/network/index.ts](./src/client/network/index.ts)**
-- [x] **[src/client/network/listener.client.ts](./src/client/network/listener.client.ts)**
+- [x] **[src/client/network/network.client.ts](./src/client/network/network.client.ts)**
 - [x] **[src/client/states/PlayerState.ts](./src/client/states/PlayerState.ts)**
 - [x] **[src/client/states/ScreenState.ts](./src/client/states/ScreenState.ts)**
 - [x] **[src/client/states/SettingsState.ts](./src/client/states/SettingsState.ts)**
